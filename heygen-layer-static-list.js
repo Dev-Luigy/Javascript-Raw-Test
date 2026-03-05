@@ -66,21 +66,28 @@ const DEFAULT_CONFIG = {
 
 function createAnimation(container, userConfig = {}) {
   const cfg = { ...DEFAULT_CONFIG, ...userConfig };
+  cfg.values = { ...DEFAULT_CONFIG.values, ...(userConfig.values || {}) };
 
-  // ----- Set font for container -----
+  for (const key of Object.keys(DEFAULT_CONFIG.values)) {
+    if (userConfig.values && userConfig.values[key]) {
+      cfg.values[key] = {
+        ...DEFAULT_CONFIG.values[key],
+        ...userConfig.values[key],
+      };
+    }
+  }
+
   const fontLink = document.createElement("link");
   fontLink.href = cfg.font.source;
   fontLink.rel = "stylesheet";
   document.head.appendChild(fontLink);
   container.style.fontFamily = `"${cfg.font.name}", ${cfg.font.default_name}`;
 
-  // ----- Setup DOM -----
   container.style.width = `${cfg.width}px`;
   container.style.height = `${cfg.height}px`;
   container.style.position = "relative";
   container.style.overflow = "hidden";
 
-  // Main Content Wrapper
   const content = document.createElement("div");
   content.id = "content";
   content.style.position = "absolute";
@@ -92,7 +99,7 @@ function createAnimation(container, userConfig = {}) {
   content.style.gap = "30px";
   container.appendChild(content);
 
-  const active = cfg.values.activeItem.value;
+  const active = Number(cfg.values.activeItem.value) || 1;
   const color = cfg.values.primaryColor.value;
 
   const itemsData = [
@@ -114,8 +121,11 @@ function createAnimation(container, userConfig = {}) {
     },
   ];
 
-  const itemElements = itemsData.map((data, index) => {
-    const itemIndex = index + 1;
+  const itemElements = [];
+
+  for (let i = 0; i < itemsData.length; i++) {
+    const data = itemsData[i];
+    const itemIndex = i + 1;
     const isVisible = itemIndex < active;
     const isActive = itemIndex === active;
     const isHidden = itemIndex > active;
@@ -130,9 +140,6 @@ function createAnimation(container, userConfig = {}) {
     row.style.boxShadow = "0 4px 15px rgba(0,0,0,0.1)";
     row.style.borderLeft = `8px solid ${color}`;
 
-    // Previous items: fully visible from start
-    // Active item: starts hidden, will animate in
-    // Future items: hidden
     if (isVisible) {
       row.style.opacity = "1";
       row.style.transform = "translateX(0)";
@@ -151,48 +158,40 @@ function createAnimation(container, userConfig = {}) {
     iconSvg.style.fill = color;
     iconSvg.style.flexShrink = "0";
 
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute("d", data.icon);
-    iconSvg.appendChild(path);
+    const pathEl = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "path",
+    );
+    pathEl.setAttribute("d", data.icon);
+    iconSvg.appendChild(pathEl);
 
-    const text = document.createElement("div");
-    text.innerText = data.text;
-    text.style.color = color;
-    text.style.fontSize = "32px";
-    text.style.fontWeight = "700";
-    text.style.lineHeight = "1.2";
+    const textEl = document.createElement("div");
+    textEl.innerText = data.text;
+    textEl.style.color = color;
+    textEl.style.fontSize = "32px";
+    textEl.style.fontWeight = "700";
+    textEl.style.lineHeight = "1.2";
 
     row.appendChild(iconSvg);
-    row.appendChild(text);
+    row.appendChild(textEl);
     content.appendChild(row);
-    return { el: row, isVisible, isActive, isHidden };
-  });
 
-  // ----- Construct Timeline -----
+    itemElements.push({ el: row, isVisible, isActive, isHidden });
+  }
+
   const tl = gsap.timeline();
 
-  // Previous items: ensure they stay visible
-  itemElements.forEach((item) => {
+  for (let j = 0; j < itemElements.length; j++) {
+    const item = itemElements[j];
     if (item.isVisible) {
       tl.set(item.el, { opacity: 1, x: 0 }, 0);
     }
-  });
-
-  // Active item: animate entrance
-  itemElements.forEach((item) => {
     if (item.isActive) {
       tl.to(
         item.el,
-        {
-          opacity: 1,
-          x: 0,
-          duration: 0.8,
-          ease: "power2.out",
-        },
+        { opacity: 1, x: 0, duration: 0.8, ease: "power2.out" },
         0.5,
       );
-
-      // Subtle emphasis pulse
       tl.to(
         item.el,
         {
@@ -205,16 +204,11 @@ function createAnimation(container, userConfig = {}) {
         1.5,
       );
     }
-  });
-
-  // Future items: stay hidden
-  itemElements.forEach((item) => {
     if (item.isHidden) {
       tl.set(item.el, { opacity: 0, x: 50 }, 0);
     }
-  });
+  }
 
-  // ----- Return Controller -----
   return {
     get duration() {
       return cfg.duration;
